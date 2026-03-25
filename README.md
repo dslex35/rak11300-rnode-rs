@@ -49,8 +49,11 @@ memory.x / build.rs — linker script and build helpers for RP2040
 rak11300-rnode.uf2 — pre-built binary
 
 Building from source (optional)
-Bashcargo build --release
+
+```Bash
+cargo build --release
 # The UF2 will be generated in target/...
+```
 License
 GPL-3.0
 
