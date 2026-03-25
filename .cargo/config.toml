@@ -1,0 +1,22 @@
+[build]
+target = "thumbv6m-none-eabi"
+
+[target.thumbv6m-none-eabi]
+# --- USB UF2 bootloader (no debug probe needed) ---
+# 1. Hold the BOOT button on the RAK11300 while plugging USB into the Pi.
+# 2. A drive called "RPI-RP2" will appear — then just run: cargo run --release
+runner = "elf2uf2-rs -d"
+
+# --- Debug probe (J-Link, Picoprobe, CMSIS-DAP, etc.) ---
+# Requires probe-rs installed and a probe wired to the RAK11300 SWD pads.
+# Gives full RTT log output (defmt) and breakpoint support.
+# runner = "probe-rs run --chip RP2040"
+rustflags = [
+    # cortex-m-rt linker script — sets up memory regions (FLASH / RAM),
+    # interrupt vector table, and the reset handler entry point.
+    "-C", "link-arg=-Tlink.x",
+
+    # defmt-rtt linker script — places the .defmt section that encodes
+    # log strings at compile time so only indices are sent over RTT.
+    "-C", "link-arg=-Tdefmt.x",
+]

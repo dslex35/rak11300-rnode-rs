@@ -1,0 +1,80 @@
+[package]
+name = "rak11300-rnode"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Embassy core crates (RP2040 target)
+embassy-rp = { git = "https://github.com/embassy-rs/embassy", branch = "main", features = [
+    "rp2040",
+    "defmt",
+    "unstable-pac",
+    "time-driver",
+    "critical-section-impl",
+] }
+embassy-executor = { git = "https://github.com/embassy-rs/embassy", branch = "main", features = [
+    "platform-cortex-m",
+    "executor-thread",
+    "defmt",
+    "embassy-time-driver",
+] }
+embassy-time = { git = "https://github.com/embassy-rs/embassy", branch = "main", features = [
+    "defmt",
+    "defmt-timestamp-uptime",
+] }
+embassy-usb = { git = "https://github.com/embassy-rs/embassy", branch = "main", features = [
+    "defmt",
+] }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy", branch = "main", features = [
+    "defmt",
+] }
+embassy-futures = { git = "https://github.com/embassy-rs/embassy", branch = "main" }
+
+# LoRa radio driver — replaces the wrong "sx1262" crate.
+# lora-phy v3 provides async SX126x support that works with embassy-rp.
+# "sx1262 = 0.3.0" was wrong: the crate name does not match (main.rs uses
+# `sx126x`), version 0.3.0 does not exist, and the sx126x crate is
+# synchronous (embedded-hal 0.x) so .await calls would never compile.
+lora-phy = "3"
+
+# Wraps an SpiBus + CS pin into an SpiDevice without needing a Mutex,
+# because the SX1262 is the only device on SPI1.
+# Replaces the embassy-embedded-hal shared-bus SpiDevice which requires
+# a Mutex wrapper and was used incorrectly in the original code.
+embedded-hal-bus = { version = "0.2", features = ["async"] }
+
+# Required for 'static USB descriptor / state buffers used by the USB task.
+static_cell = "2"
+
+# Cortex-M bare-metal support.
+# cortex-m-rt provides the entry point / linker integration;
+# cortex-m provides peripheral access (e.g. NVIC, SCB).
+cortex-m-rt = "0.7"
+cortex-m    = "0.7"
+
+# Logging / panic via probe-rs RTT
+defmt       = "0.3"
+defmt-rtt   = "0.4"
+panic-probe = { version = "0.3", features = ["print-defmt"] }
+
+# Heapless collections (Vec used for the KISS frame buffer)
+heapless = "0.8"
+
+# The RP2040 (Cortex-M0+) has no native hardware CAS instructions.
+# portable-atomic emulates them using critical sections when this feature
+# is enabled — embassy-rp's `critical-section-impl` feature (already
+# declared above) provides the correct RP2040 implementation.
+portable-atomic = { version = "1", features = ["critical-section"] }
+
+# -----------------------------------------------------------------------
+# Build profiles — optimise for size on both dev and release builds.
+# `debug = true` on release keeps DWARF info available for probe-rs.
+# -----------------------------------------------------------------------
+[profile.dev]
+opt-level = "s"
+lto        = true
+
+[profile.release]
+opt-level = "s"
+lto        = true
+debug      = true
