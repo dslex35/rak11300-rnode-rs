@@ -38,7 +38,7 @@ pip install rns
 
 # Discover and configure the RNode (usually over USB serial)
 rnodeconf /dev/ttyACM0 --autoinstall   # adjust port as needed
-
+```
 # Or add it manually in your Reticulum config
 The RNode will now participate in your Reticulum mesh network over LoRa.
 Project Structure
