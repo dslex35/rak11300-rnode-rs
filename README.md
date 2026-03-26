@@ -1,61 +1,120 @@
-# rak11300-rnode-rs
+# rak11300-rnode
 
-**Rust native RNode firmware for the RAK11300 (RP2040 + SX1262)**
+> Rust RNode firmware for RAK11300 (RP2040 + SX1262)
 
-A lightweight, bare-metal implementation that turns your RAK11300 module into a fully functional **RNode** for the [Reticulum](https://reticulum.network) network stack.
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
+[![Target: thumbv6m-none-eabi](https://img.shields.io/badge/target-thumbv6m--none--eabi-lightgrey.svg)]()
 
-## What is this?
+## What it does
 
-- Runs directly on the RP2040 (no OS)
-- Uses the onboard SX1262 LoRa radio
-- Implements RNode protocol over LoRa
-- Compatible with Reticulum (Python, Rust, or any other RNS implementation)
+Bare-metal async Rust firmware using [Embassy](https://embassy.dev) that turns the RAK11300 into an RNode — a KISS-over-USB-CDC LoRa modem compatible with the [Reticulum Network Stack](https://reticulum.network). Receives LoRa packets and forwards them to the host; receives KISS frames from the host and transmits over LoRa.
 
-## Features
+## Hardware
 
-- Small binary (UF2 provided)
-- Low resource usage
-- Standard RNode KISS-like interface over Reticulum
-- Easy to flash and use
+| Component | Detail |
+|-----------|--------|
+| Board | RAKwireless RAK11300 |
+| MCU | RP2040 (dual-core Cortex-M0+, 133 MHz) |
+| Radio | Semtech SX1262 (LoRa / FSK) |
+| Interface | USB CDC-ACM (`/dev/ttyACM0`) |
 
-## Quick Start
+## Confirmed RAK11300 Pinout
 
-### 1. Flash the firmware
+| GPIO | SX1262 Pin | Notes |
+|------|------------|-------|
+| GPIO10 | SCK | SPI clock |
+| GPIO11 | MOSI | SPI data out |
+| GPIO12 | MISO | SPI data in |
+| GPIO13 | NSS | SPI chip select |
+| GPIO14 | RESET | Radio reset |
+| GPIO15 | BUSY | Radio busy signal |
+| GPIO29 | DIO1 | IRQ line |
+| GPIO25 | RXEN | Antenna switch power |
+| — | DIO2 | Antenna switch direction (auto via lora-phy) |
+| — | DIO3 | TCXO supply ~1.7 V (auto via lora-phy) |
 
-1. Put your RAK11300 (or board with RAK11300) into **bootloader mode** (hold BOOT button while powering on / resetting).
-2. Copy the provided `rak11300-rnode.uf2` file to the mounted `RPI-RP2` drive.
-3. The board will reboot automatically with the RNode firmware.
+## Flash (quickest way)
 
-### 2. Use with Reticulum
+1. Install Rust and the RP2040 target:
+   ```bash
+   rustup target add thumbv6m-none-eabi
+   cargo install elf2uf2-rs
+   ```
+2. Hold the **BOOT** button while plugging in USB — the board mounts as `RPI-RP2`.
+3. Flash:
+   ```bash
+   cargo run --release
+   ```
 
-Once flashed, the device appears as a normal **RNode** interface.
-
-On your computer (or another device running Reticulum):
+## Build from Source
 
 ```bash
-# Install Reticulum if not already installed
-pip install rns
-
-# Discover and configure the RNode (usually over USB serial)
-rnodeconf /dev/ttyACM0 --autoinstall   # adjust port as needed
-```
-# Or add it manually in your Reticulum config
-The RNode will now participate in your Reticulum mesh network over LoRa.
-Project Structure
-
-src/main.rs — main firmware (bare-metal Rust + embassy / rp2040-hal)
-Cargo.toml — Rust dependencies and build config
-memory.x / build.rs — linker script and build helpers for RP2040
-rak11300-rnode.uf2 — pre-built binary
-
-Building from source (optional)
-
-```Bash
+rustup target add thumbv6m-none-eabi
+cargo install elf2uf2-rs
 cargo build --release
-# The UF2 will be generated in target/...
 ```
-License
-GPL-3.0
 
-Made for the Reticulum community.
-Pull requests and issues welcome!
+## Reticulum Configuration
+
+Add the following block under `[interfaces]` in `~/.reticulum/config`:
+
+```toml
+[[RAK11300 RNode]]
+type = KISSInterface
+enabled = Yes
+port = /dev/ttyACM0
+speed = 115200
+frequency = 868200000
+bandwidth = 125000
+txpower = 14
+spreadingfactor = 7
+codingrate = 5
+```
+
+The port is `/dev/ttyACM0` on Linux or `COM3` (or similar) on Windows. After saving, restart `rnsd`.
+
+Verify the interface is up:
+
+```bash
+rnstatus | grep -A5 "RAK11300"
+```
+
+Expected output includes `Status : Up` and incrementing traffic counters once packets flow.
+
+## KISS Commands Supported
+
+| Command | Byte | Description |
+|---------|------|-------------|
+| CMD_DATA | `0x00` | Send / receive a LoRa packet |
+| CMD_FREQ | `0x01` | Set centre frequency (Hz) |
+| CMD_BW | `0x02` | Set bandwidth (Hz) |
+| CMD_TXPWR | `0x03` | Set TX power (dBm) |
+| CMD_SF | `0x04` | Set spreading factor |
+| CMD_CR | `0x05` | Set coding rate |
+| CMD_STAT_RSSI | `0x23` | Last packet RSSI |
+| CMD_STAT_SNR | `0x24` | Last packet SNR |
+
+## Key Dependencies
+
+- [`embassy-rp`](https://crates.io/crates/embassy-rp) — RP2040 HAL + peripherals
+- [`embassy-executor`](https://crates.io/crates/embassy-executor) — async task executor
+- [`embassy-usb`](https://crates.io/crates/embassy-usb) — USB device stack (CDC-ACM)
+- [`lora-phy`](https://crates.io/crates/lora-phy) v3 — SX1262 driver
+- [`embassy-futures`](https://crates.io/crates/embassy-futures) — async utilities
+- [`embedded-hal-bus`](https://crates.io/crates/embedded-hal-bus) — SPI bus sharing
+- [`heapless`](https://crates.io/crates/heapless) — fixed-size collections
+- [`defmt`](https://crates.io/crates/defmt) — lightweight logging
+
+## Project Layout
+
+```
+src/main.rs          — full firmware (KISS decoder, LoRa RX/TX, USB CDC)
+Cargo.toml           — dependencies
+.cargo/config.toml   — target thumbv6m-none-eabi + linker flags
+memory.x             — RP2040 memory layout
+build.rs             — linker search path
+```
+
+## License
+
+[GPL-3.0](LICENSE)
